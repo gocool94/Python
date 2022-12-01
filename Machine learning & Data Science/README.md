@@ -54,6 +54,16 @@ Sharing the environment
 https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#sharing-an-environment
 
 
+ # 06 - Pandas
+    - Created using the Pandas_section.ipynb
+
+# Github and git
+
+    - Pull request
+      - git pulldfa;lsdkjf;alkdjf
+    - 
+
+
 # Section - 13 Data Engineering
 
 
