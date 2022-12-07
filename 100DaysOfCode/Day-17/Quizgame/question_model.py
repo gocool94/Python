@@ -6,6 +6,3 @@ class Question():
 
 
 
-q1 = Question("Niranjhani is a bad girl","False")
-print(q1.text)
-print(q1.answer)
