@@ -1,0 +1,3 @@
+int(input(
+    'Hello'
+))
