@@ -31,7 +31,6 @@ async def read_book_by_title(booktitle:str):
 
 
 
-
 @app.get("/books/")
 async def categories_of_the_Books(booktitle:str):
     books_to_return = []
