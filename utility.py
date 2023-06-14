@@ -12,20 +12,19 @@ import concurrent.futures
 from joblib import Parallel, delayed
 
 
+#database connectivity
+
+server = 'GOKULXY180\GOKUL_INSTANCE'
+database = 'patient'
+username = 'sa'
+password = 'password_123'
+conn_str = f"mssql+pyodbc://{username}:{password}@{server}/{database}?driver=ODBC+Driver+17+for+SQL+Server"
+
 
 def database_connection_1(df):
-
-    server = 'GOKULXY180\GOKUL_INSTANCE'
-    database = 'patient'
-    username = 'sa'
-    password = 'password_123'
-
-    conn_str = f"mssql+pyodbc://{username}:{password}@{server}/{database}?driver=ODBC+Driver+17+for+SQL+Server"
     engine = create_engine(conn_str)
     batch_size = 100000
-
     num_batches = len(df) // batch_size
-
     print(f"Batch split to {num_batches} counts.")
     for i in range(num_batches):
         print(f"Updating the {i} batch")
@@ -84,7 +83,10 @@ def data_parsing(location):
     # df.to_sql(name='patients_details', con=engine, if_exists='append', index=False)
 
 def process_chunk(chunk):
-    print(chunk)
+    bearer_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJ1cm46b2lkOmZoaXIiLCJjbGllbnRfaWQiOiJkMzE5NDlhMi0zM2YwLTRjNWEtOWViNC02N2IzZDk4NTdhOTMiLCJlcGljLmVjaSI6InVybjplcGljOk9wZW4uRXBpYy1jdXJyZW50IiwiZXBpYy5tZXRhZGF0YSI6IkU1VFJ4X0tGX0Nqc3BfQVc0SU9WZnV5dFE4RWQtT3FrSENHSGVWeUpzaTNfZWdFbHZqc05wYkdQMWJHX0pRZVpwX0ItUFo5NWRiVzN6M2ROQ0pySHF1UUFwcld2aFViU1ZJRkZNQnpoTEhKVl9tSklrTkRpS0ZmdktEbTFsaGVjIiwiZXBpYy50b2tlbnR5cGUiOiJhY2Nlc3MiLCJleHAiOjE2ODU2MjE5MzEsImlhdCI6MTY4NTYxODMzMSwiaXNzIjoidXJuOm9pZDpmaGlyIiwianRpIjoiZjU0MzkxOGItMzgwMy00OWFjLTg4ZjQtYTgxNTRiM2UyYWU1IiwibmJmIjoxNjg1NjE4MzMxLCJzdWIiOiJldk5wLUtoWXdPT3FBWm4xcFoyZW51QTMifQ.Hn0xVcwHAH_leIbq4LvziD7TW65wnw1m45HUDx9o4Rg_pwQlXpkmOTgCPaGbZ480TW85v4niaZL_rodKo-uMa41YKVW4tIqayGYfMX7MfnDV_BWNMTfrD_QNi9PoQvy6IamJpG-ytwDEgkclyaB1PEGsCZR7ej1jniSwVAqYAaSz-2dFgYeZt4gLKzW9GEoi_0nptwrkRWnLUVnW8oitIJCuepkqy3HzK5GBefFQ-qjc7OOXFJKMv3JINoOJ80iAg9qoOkmAggTxdvnagB-oHaSCHWrN5apfG1zVaHE8c8xYiU0Wr_8-NHdnOSHwkCPwkiSxT4xFOTn4Cxaz5jsuPg"
+    headers = {"Authorization": "Bearer " + bearer_token,
+               "Accept": "application/json"}
+    print("process is being started")
     for i in range(0, len(chunk)):
         patient_id = chunk.iloc[i, 0]
         patient_fname = chunk.iloc[i, 1]
@@ -93,6 +95,47 @@ def process_chunk(chunk):
         patient_gender = chunk.iloc[i, 4]
         patient_dob = str(chunk.iloc[i, 5])
         patient_mrn = chunk.iloc[i, 6]
+
+        re = requests.get(
+            "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Patient?birthdate=" + patient_dob + "&family=" + patient_lname + "&gender=" + patient_gender + "",
+            headers=headers)
+        # get the status code
+        #print(re.status_code)
+        while (re.status_code == 401):
+            time.sleep(10)
+            headers = get_connection(input("Enter the bearer token:--"))
+            # bearer token get here
+            re = requests.get(
+                "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/Patient?birthdate=" + patient_dob + "&family=" + patient_lname + "&gender=" + patient_gender + "",
+                headers=headers)
+
+        str_data = re.content.decode('utf-8')
+
+        # Convert string to Python object
+        python_obj = json.loads(str_data)
+
+        # Convert Python object to JSON string
+        json_data = json.dumps(python_obj)
+        #print(json_data)
+
+        p_value = python_obj["total"]
+        #print(p_value)
+        patient_entry = python_obj.get('entry', [])[0]
+        # Assumes only one patient entry
+
+        if p_value >= 1:
+            patient_resource = patient_entry.get('resource', {})
+            patient_id = patient_resource.get('id')
+            #print(patient_id)
+            chunk.iloc[i, 7] = patient_id
+
+            chunk.iloc[i, 8] = "true"
+
+        else:
+            chunk.iloc[i, 7] = 0
+            chunk.iloc[i, 8] = 'false'
+        print(f"Completed {i} of {len(chunk)}")
+        #print(chunk)
     return chunk
 
 def get_connection(bearer_token):
@@ -124,15 +167,21 @@ if __name__ == '__main__':
     # Print the elapsed time
     print(f"Elapsed time: {minutes} minutes {seconds} seconds")
     print("update completed")
-    num_chunks = 10000
+    bearer_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJ1cm46b2lkOmZoaXIiLCJjbGllbnRfaWQiOiJkMzE5NDlhMi0zM2YwLTRjNWEtOWViNC02N2IzZDk4NTdhOTMiLCJlcGljLmVjaSI6InVybjplcGljOk9wZW4uRXBpYy1jdXJyZW50IiwiZXBpYy5tZXRhZGF0YSI6IkU1VFJ4X0tGX0Nqc3BfQVc0SU9WZnV5dFE4RWQtT3FrSENHSGVWeUpzaTNfZWdFbHZqc05wYkdQMWJHX0pRZVpwX0ItUFo5NWRiVzN6M2ROQ0pySHF1UUFwcld2aFViU1ZJRkZNQnpoTEhKVl9tSklrTkRpS0ZmdktEbTFsaGVjIiwiZXBpYy50b2tlbnR5cGUiOiJhY2Nlc3MiLCJleHAiOjE2ODU2MjE5MzEsImlhdCI6MTY4NTYxODMzMSwiaXNzIjoidXJuOm9pZDpmaGlyIiwianRpIjoiZjU0MzkxOGItMzgwMy00OWFjLTg4ZjQtYTgxNTRiM2UyYWU1IiwibmJmIjoxNjg1NjE4MzMxLCJzdWIiOiJldk5wLUtoWXdPT3FBWm4xcFoyZW51QTMifQ.Hn0xVcwHAH_leIbq4LvziD7TW65wnw1m45HUDx9o4Rg_pwQlXpkmOTgCPaGbZ480TW85v4niaZL_rodKo-uMa41YKVW4tIqayGYfMX7MfnDV_BWNMTfrD_QNi9PoQvy6IamJpG-ytwDEgkclyaB1PEGsCZR7ej1jniSwVAqYAaSz-2dFgYeZt4gLKzW9GEoi_0nptwrkRWnLUVnW8oitIJCuepkqy3HzK5GBefFQ-qjc7OOXFJKMv3JINoOJ80iAg9qoOkmAggTxdvnagB-oHaSCHWrN5apfG1zVaHE8c8xYiU0Wr_8-NHdnOSHwkCPwkiSxT4xFOTn4Cxaz5jsuPg"
+    headers = {"Authorization": "Bearer " + bearer_token,
+               "Accept": "application/json"}
+
+    #headers = get_connection(input("Enter the bearer token:--"))
+    num_chunks = 10
     print(num_chunks)
     chunk_size = len(df) // num_chunks
     print(chunk_size)
     chunks = [df[i:i + chunk_size].copy() for i in range(0, len(df), chunk_size)]
-    print(chunks)
+    #print(chunks)
     processed_chunks = Parallel(n_jobs=-1)(delayed(process_chunk)(chunk) for chunk in chunks)
     combined_df = pd.concat(processed_chunks)
     print(combined_df)
+    database_connection_1(combined_df)
 
 
 
